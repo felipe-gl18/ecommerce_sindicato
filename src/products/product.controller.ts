@@ -20,6 +20,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { SellerGuard } from 'src/auth/seller.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ActiveSubscriptionGuard } from 'src/auth/activeSubscription.guard';
 
 @Controller('products')
 export class ProductController {
@@ -38,7 +39,7 @@ export class ProductController {
   }
 
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(AuthGuard, SellerGuard)
+  @UseGuards(AuthGuard, SellerGuard, ActiveSubscriptionGuard)
   @Post()
   async createProduct(
     @Body(new ValidationPipe()) createProductDto: CreateProductDto,
@@ -49,7 +50,7 @@ export class ProductController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @UseGuards(AuthGuard, SellerGuard)
+  @UseGuards(AuthGuard, SellerGuard, ActiveSubscriptionGuard)
   @Put(':id')
   async updateProduct(
     @Param('id') id: string,
@@ -66,7 +67,7 @@ export class ProductController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @UseGuards(AuthGuard, SellerGuard)
+  @UseGuards(AuthGuard, SellerGuard, ActiveSubscriptionGuard)
   @Post('upload/:id')
   @UseInterceptors(FileInterceptor('file'))
   async upload(
@@ -80,7 +81,7 @@ export class ProductController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @UseGuards(AuthGuard, SellerGuard)
+  @UseGuards(AuthGuard, SellerGuard, ActiveSubscriptionGuard)
   @Delete(':id')
   async deleteProduct(@Param('id') id: string, @Request() req: Request) {
     const user = req['user'] as { sub: string };
