@@ -4,10 +4,19 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { ProductsModule } from './products/product.module';
-import { PaymentsModule } from './payments/payment.modules';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { OrderModule } from './orders/orders.module';
+import { PaymentProviderModule } from './payment-provider/payment-provider.module';
 
 @Module({
-  imports: [AuthModule, ProductsModule, PaymentsModule],
+  imports: [
+    AuthModule,
+    ProductsModule,
+    SubscriptionModule,
+    OrderModule,
+    PaymentProviderModule,
+    SubscriptionModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
