@@ -1,0 +1,72 @@
+import {
+  Body,
+  Controller,
+  Headers,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { SubscriptionService } from './subscription.service';
+
+type Webhook = {
+  payment: {
+    id: string;
+  };
+};
+
+@Controller('webhook/subscription')
+export class AsaasWebhook {
+  constructor(private subscriptionService: SubscriptionService) {}
+  @Post()
+  async handle(
+    @Body()
+    body: Webhook,
+    @Headers('asaas-access-token') token: string,
+  ) {
+    if (token !== process.env.ASAAS_WEBHOOK_TOKEN)
+      throw new UnauthorizedException('Invalid webhook token');
+
+    const { payment } = body;
+
+    // search subscription
+    const subscription = await this.subscriptionService.getSubscriptionById(
+      payment.id,
+    );
+    if (!subscription)
+      throw new UnauthorizedException('Subscription not found');
+
+    // if the subscription is already paid, we don't need to validate it again
+    if (subscription.status === 'PAID')
+      return {
+        received: true,
+      };
+
+    // validate real payment status with asaas api
+    const realPayment = await this.subscriptionService.validatePayment(
+      payment.id,
+      process.env.ASAAS_API_KEY!,
+    );
+
+    if (realPayment.id !== subscription.asaasSubscriptionId)
+      throw new UnauthorizedException('Payment mismatch');
+
+    // if the payment is pending, we don't need to update the subscription status
+    if (realPayment.status === 'PENDING') return { received: true };
+
+    // real status can be CONFIRMED, RECEIVED, OVERDUE, FAILED, REFUNDED or CHARGEBACK
+    if (
+      realPayment.status === 'CONFIRMED' ||
+      realPayment.status === 'RECEIVED'
+    ) {
+      await this.subscriptionService.paymentStatus('PAID', payment.id);
+    }
+
+    if (
+      realPayment.status === 'OVERDUE' ||
+      realPayment.status === 'FAILED' ||
+      realPayment.status === 'REFUNDED' ||
+      realPayment.status === 'CHARGEBACK'
+    ) {
+      await this.subscriptionService.paymentStatus('EXPIRED', payment.id);
+    }
+  }
+}
