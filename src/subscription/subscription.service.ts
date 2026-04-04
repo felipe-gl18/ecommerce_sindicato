@@ -6,15 +6,11 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { CreatePaymentDto } from './dtos/create-payment.dto';
-import { Prisma, Subscription } from 'src/generated/prisma/client';
-import { ConfigService } from '@nestjs/config';
+import { Prisma, Subscription } from '@prisma/client';
 
 @Injectable()
 export class SubscriptionService {
-  constructor(
-    private prismaService: PrismaService,
-    private configService: ConfigService,
-  ) {}
+  constructor(private prismaService: PrismaService) {}
 
   async create(createPaymentDto: CreatePaymentDto) {
     try {
