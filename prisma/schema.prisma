@@ -51,47 +51,65 @@ model User {
 }
 
 model Product {
-  id          String   @id @default(uuid())
+  id          String @id @default(uuid())
   name        String
   description String
   price       Float
-  amount      Int
+  stock       Int
+  soldCount   Int
   image       String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  orders      Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items OrderItem[]
 }
 
 model Order {
   id String @id @default(uuid())
 
   buyerId String
-  buyer   User   @relation("BuyerOrders", fields: [buyerId], references: [id])
+  buyer   User   @relation("BuyerOrders", fields: [buyerId], references: [id], onDelete: Cascade)
 
   sellerId String
-  seller   User   @relation("SellerOrders", fields: [sellerId], references: [id])
+  seller   User   @relation("SellerOrders", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  asaasPaymentId String? @unique
+
+  status PaymentStatus @default(PENDING)
+
+  total Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
-  asaasPaymentId String @unique
-
-  status PaymentStatus @default(PENDING)
-
-  price Float
+  price    Float
+  quantity Int
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model Subscription {
   id     String @id @default(uuid())
   userId String
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  asaasSubscriptionId String        @unique()
+  asaasSubscriptionId String?       @unique()
   status              PaymentStatus
   dueDate             DateTime
 }
@@ -100,7 +118,7 @@ model SellerPaymentAccount {
   id       String                @id @default(uuid())
   provider SellerPaymentProvider @default(ASAASTransfer)
   userId   String                @unique
-  user     User                  @relation(fields: [userId], references: [id])
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   encryptedApiKey String
   isActive        Boolean @default(true)
