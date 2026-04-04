@@ -1,4 +1,16 @@
-import { IsNumber, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsNumber, IsString, ValidateNested } from 'class-validator';
+
+class OrderItemDto {
+  @IsString()
+  productId: string;
+
+  @IsNumber()
+  price: number;
+
+  @IsNumber()
+  quantity: number;
+}
 
 export class OrderDto {
   @IsString()
@@ -7,12 +19,14 @@ export class OrderDto {
   @IsString()
   sellerId: string;
 
-  @IsString()
-  productId: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemDto)
+  items: OrderItemDto[];
 
   @IsString()
-  asaasPaymentId: string;
+  asaasPaymentId?: string;
 
   @IsNumber()
-  price: number;
+  total: number;
 }

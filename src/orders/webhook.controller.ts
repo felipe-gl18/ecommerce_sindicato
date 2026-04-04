@@ -5,6 +5,8 @@ import {
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PaymentGatewayService } from 'src/payment-gateway/payment-gateway.service';
 import { OrdersService } from 'src/orders/orders.service';
 import { PaymentProviderService } from 'src/payment-provider/payment-provider.service';
 
@@ -15,10 +17,12 @@ type Webhook = {
 };
 
 @Controller('webhook/orders')
-export class AsaasWebhook {
+export class WebhookController {
   constructor(
     private orderService: OrdersService,
     private paymentProviderService: PaymentProviderService,
+    private configService: ConfigService,
+    private paymentGatewayService: PaymentGatewayService,
   ) {}
   @Post()
   async handle(
@@ -26,7 +30,7 @@ export class AsaasWebhook {
     body: Webhook,
     @Headers('asaas-access-token') token: string,
   ) {
-    if (token !== process.env.ASAAS_WEBHOOK_TOKEN)
+    if (token !== this.configService.get<string>('ASAAS_WEBHOOK_TOKEN'))
       throw new UnauthorizedException('Invalid webhook token');
 
     const { payment } = body;
@@ -48,15 +52,16 @@ export class AsaasWebhook {
     if (!apiKey) throw new UnauthorizedException('Seller API key not found');
 
     // validate real payment status with asaas api
-    const realPayment = await this.orderService.validatePayment(
+    const realPayment = await this.paymentGatewayService.validatePayment(
       payment.id,
       apiKey,
     );
+    console.log(realPayment);
 
     if (realPayment.id !== order.asaasPaymentId)
       throw new UnauthorizedException('Payment mismatch');
 
-    if (realPayment.value !== order.price)
+    if (realPayment.value !== order.total)
       throw new UnauthorizedException('Payment amount mismatch');
 
     if (realPayment.status === 'PENDING') return { received: true };
@@ -66,6 +71,7 @@ export class AsaasWebhook {
       realPayment.status === 'CONFIRMED' ||
       realPayment.status === 'RECEIVED'
     ) {
+      console.log('received');
       await this.orderService.updateStatus(payment.id, 'PAID');
     }
 

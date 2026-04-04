@@ -1,20 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { PaymentStatus } from 'src/generated/prisma/enums';
 import { Prisma } from 'src/generated/prisma/client';
 import { CreatePaymentProviderOrderDto } from './dtos/create-payment-provider-order.dto';
 import { PaymentProviderService } from 'src/payment-provider/payment-provider.service';
-import { OrderDto } from './dtos/order.dto';
 import { BillingService } from 'src/billing/billing.service';
+import { ConfigService } from '@nestjs/config';
 
-type AsaasPaymentStatus =
-  | 'PENDING'
-  | 'RECEIVED'
-  | 'CONFIRMED'
-  | 'OVERDUE'
-  | 'FAILED'
-  | 'REFUNDED'
-  | 'CHARGEBACK';
+type ItemData = {
+  productId: string;
+  price: number;
+  quantity: number;
+};
 
 @Injectable()
 export class OrdersService {
@@ -22,31 +24,33 @@ export class OrdersService {
     private prismaService: PrismaService,
     private paymentProviderService: PaymentProviderService,
     private billingService: BillingService,
+    private configService: ConfigService,
   ) {}
   async order(userId: string, id: string) {
-    const buyer = await this.prismaService.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
+    try {
+      const buyer = await this.prismaService.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
 
-    if (!buyer) return null;
+      if (!buyer) throw new NotFoundException('User not found');
 
-    return this.prismaService.product.findFirst({
-      where: {
-        id,
-        userId: buyer.id,
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        amount: true,
-        price: true,
-        createdAt: true,
-        updatedAt: true,
-        image: true,
-      },
-    });
+      return this.prismaService.order.findFirst({
+        where: {
+          id,
+          buyerId: buyer.id,
+        },
+        include: {
+          items: {
+            include: {
+              product: true,
+            },
+          },
+        },
+      });
+    } catch {
+      throw new InternalServerErrorException('Failed to fetch order');
+    }
   }
 
   async orders(params: {
@@ -56,151 +60,213 @@ export class OrdersService {
     userId: string;
     orderBy?: Prisma.OrderOrderByWithRelationInput;
   }) {
-    const buyer = await this.prismaService.user.findUnique({
-      where: { id: params.userId },
-      select: { id: true },
-    });
+    try {
+      const buyer = await this.prismaService.user.findUnique({
+        where: { id: params.userId },
+        select: { id: true },
+      });
 
-    if (!buyer) return null;
+      if (!buyer) return null;
 
-    return this.prismaService.order.findMany({
-      skip: params.skip,
-      take: params.take,
-      cursor: params.cursor,
-      where: {
-        buyerId: buyer.id,
-      },
-      orderBy: params.orderBy,
-      select: {
-        id: true,
-        status: true,
-        product: true,
-        price: true,
-        asaasPaymentId: true,
-        buyer: true,
-        seller: true,
-        createdAt: true,
-      },
-    });
+      return this.prismaService.order.findMany({
+        skip: params.skip,
+        take: params.take,
+        cursor: params.cursor,
+        where: {
+          buyerId: buyer.id,
+        },
+        orderBy: params.orderBy,
+        select: {
+          id: true,
+          status: true,
+          total: true,
+          asaasPaymentId: true,
+          buyer: true,
+          seller: true,
+          createdAt: true,
+          items: {
+            select: {
+              productId: true,
+              quantity: true,
+              price: true,
+              product: true, // opcional (join)
+            },
+          },
+        },
+      });
+    } catch {
+      throw new InternalServerErrorException('Failed to fetch orders');
+    }
   }
 
   async createPaymentProviderOrder(
     createPaymentProviderOrderDto: CreatePaymentProviderOrderDto,
   ) {
-    const buyer = await this.prismaService.user.findUnique({
-      where: { id: createPaymentProviderOrderDto.userId },
-    });
+    try {
+      const buyer = await this.prismaService.user.findUnique({
+        where: { id: createPaymentProviderOrderDto.userId },
+      });
 
-    if (!buyer) throw new Error('Buyer not found');
+      if (!buyer) throw new NotFoundException('User not found');
 
-    const product = await this.prismaService.product.findUnique({
-      where: { id: createPaymentProviderOrderDto.productId },
-    });
+      // search all products at once (perfomance)
+      const products = await this.prismaService.product.findMany({
+        where: {
+          id: {
+            in: createPaymentProviderOrderDto.items.map((i) => i.productId),
+          },
+        },
+      });
 
-    if (!product) throw new Error('Product not found');
+      if (products.length !== createPaymentProviderOrderDto.items.length)
+        throw new NotFoundException('One or more products not found');
 
-    const sellerId = product.userId;
+      let total = 0;
+      const itemsData: ItemData[] = [];
 
-    // We don't want the user to buy their own product
-    if (createPaymentProviderOrderDto.userId === sellerId)
-      throw new Error('You cannot buy your own product');
+      for (const item of createPaymentProviderOrderDto.items) {
+        const product = products.find((p) => p.id === item.productId);
+        if (!product) throw new NotFoundException('Product not found');
+        if (product.userId === createPaymentProviderOrderDto.userId)
+          throw new BadRequestException('You cannot buy your own product');
+        if (product.stock < item.quantity)
+          throw new BadRequestException(
+            `Insufficient stock for product ${product.name}`,
+          );
+        total += product.price * item.quantity;
+        itemsData.push({
+          productId: product.id,
+          price: product.price,
+          quantity: item.quantity,
+        });
+      }
 
-    // We also want to make sure the product is in stock
-    if (product.amount <= 0) throw new Error('Product is out of stock');
+      // seller id
+      const sellerId = products[0].userId;
 
-    // seller provider api key
-    const apiKey =
-      await this.paymentProviderService.getDecryptedApiKey(sellerId);
+      // create order + items
+      const order = await this.prismaService.order.create({
+        data: {
+          buyerId: createPaymentProviderOrderDto.userId,
+          sellerId,
+          total,
+          items: {
+            create: itemsData,
+          },
+        },
+      });
 
-    const { charge } = await this.billingService.createCharge(
-      {
-        username: buyer.username,
-        email: buyer.email,
-        cpfCnpj: buyer.cpfCnpj,
-        postalCode: buyer.postalCode,
-        billingType: createPaymentProviderOrderDto.billingType,
-        dueDate: createPaymentProviderOrderDto.dueDate,
-        value:
-          createPaymentProviderOrderDto.price *
-          createPaymentProviderOrderDto.amount,
-      },
-      'payment',
-      apiKey,
-    );
+      // seller provider api key
+      const apiKey =
+        await this.paymentProviderService.getDecryptedApiKey(sellerId);
 
-    // save order in database
-    await this.create({
-      buyerId: createPaymentProviderOrderDto.userId,
-      productId: createPaymentProviderOrderDto.productId,
-      sellerId,
-      asaasPaymentId: charge.id,
-      price: createPaymentProviderOrderDto.price,
-    });
-    return {
-      invoiceUrl: charge.invoiceUrl,
-    };
+      // create charge
+      const { charge } = await this.billingService.createCustomerWithCharge(
+        {
+          username: buyer.username,
+          email: buyer.email,
+          cpfCnpj: buyer.cpfCnpj,
+          postalCode: buyer.postalCode,
+          billingType: createPaymentProviderOrderDto.billingType,
+          dueDate: createPaymentProviderOrderDto.dueDate,
+          value: total,
+          customerExternalReference: buyer.id,
+          chargeExternalReference: order.id,
+        },
+        'payment',
+        apiKey,
+      );
+
+      // save paymentId
+      await this.prismaService.order.update({
+        data: {
+          asaasPaymentId: charge.id,
+        },
+        where: {
+          id: order.id,
+        },
+      });
+
+      return {
+        invoiceUrl: charge.invoiceUrl,
+      };
+    } catch (error) {
+      if (error instanceof Error) throw new Error(error.message);
+      throw new InternalServerErrorException(
+        'Failed to create payment provider order',
+      );
+    }
   }
 
-  async create(orderDto: OrderDto) {
-    const order = await this.prismaService.order.create({
-      data: {
-        ...orderDto,
-        status: 'PENDING',
-      },
-    });
-    return order;
-  }
+  async updateStatus(paymentId: string, status: PaymentStatus) {
+    try {
+      const order = await this.prismaService.order.findUnique({
+        where: { asaasPaymentId: paymentId },
+        include: { items: true },
+      });
+      if (!order) return;
+      // if the order has the same status, nothing needs to be done
+      if (order.status === status) return;
+      // If the order is already paid, we don't want to update it again
+      if (order?.status === 'PAID') return;
 
-  async updateStatus(id: string, status: PaymentStatus) {
-    const order = await this.prismaService.order.findUnique({ where: { id } });
-    // If the order is already paid, we don't want to update it again
-    if (order?.status === 'PAID') return;
-    await this.prismaService.order.update({
-      where: { id },
-      data: { status },
-    });
+      await this.prismaService.$transaction(async (tx) => {
+        await tx.order.update({
+          where: {
+            id: order.id,
+          },
+          data: {
+            status,
+          },
+        });
+        if (status === 'PAID') {
+          for (const item of order.items) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: {
+                stock: {
+                  decrement: item.quantity,
+                },
+                soldCount: {
+                  increment: item.quantity,
+                },
+              },
+            });
+          }
+        }
+      });
+
+      return await this.prismaService.order.update({
+        where: { asaasPaymentId: paymentId },
+        data: { status },
+      });
+    } catch (error) {
+      if (error instanceof Error) throw new Error(error.message);
+      throw new InternalServerErrorException('Failed to update order status');
+    }
   }
 
   async delete(userId: string, id: string) {
-    return this.prismaService.order.delete({ where: { id, buyerId: userId } });
+    try {
+      return this.prismaService.order.delete({
+        where: { id, buyerId: userId },
+      });
+    } catch (error) {
+      if (error instanceof Error) throw new Error(error.message);
+      throw new InternalServerErrorException('Failed to delete order');
+    }
   }
 
   async findByPaymentId(paymentId: string) {
-    return this.prismaService.order.findFirst({
-      where: { asaasPaymentId: paymentId },
-    });
-  }
-
-  async paymentStatus(
-    status: 'PAID' | 'EXPIRED' | 'PENDING',
-    asaasPaymentId: string,
-  ) {
-    await this.prismaService.order.update({
-      where: {
-        asaasPaymentId,
-      },
-      data: {
-        status,
-      },
-    });
-  }
-
-  async validatePayment(paymentId: string, apiKey: string) {
-    const response = await fetch(
-      `${process.env.ASAAS_API}/payments/${paymentId}`,
-      {
-        headers: {
-          access_token: apiKey,
-        },
-      },
-    );
-    const data = (await response.json()) as {
-      id: string;
-      status: AsaasPaymentStatus;
-      subscriptionId: string;
-      value: number;
-    };
-
-    return data;
+    try {
+      return this.prismaService.order.findFirst({
+        where: { asaasPaymentId: paymentId },
+      });
+    } catch (error) {
+      if (error instanceof Error) throw new Error(error.message);
+      throw new InternalServerErrorException(
+        'Failed to find order by payment id',
+      );
+    }
   }
 }

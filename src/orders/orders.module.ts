@@ -6,10 +6,15 @@ import { PaymentProviderService } from 'src/payment-provider/payment-provider.se
 import { CryptoService } from 'src/crypto/crypto.service';
 import { ProductsService } from 'src/products/product.service';
 import { BillingService } from 'src/billing/billing.service';
-import { AsaasService } from 'src/asaas/asaas.service';
+import { PaymentGatewayService } from 'src/payment-gateway/payment-gateway.service';
+import { UsersService } from 'src/users/user.service';
+import { SubscriptionService } from 'src/subscription/subscription.service';
+import { WebhookController } from './webhook.controller';
+import { JwtService } from '@nestjs/jwt';
+import { PaymentGatewayModule } from 'src/payment-gateway/payment-gateway.module';
 
 @Module({
-  imports: [],
+  imports: [PaymentGatewayModule],
   providers: [
     OrdersService,
     PrismaService,
@@ -17,9 +22,12 @@ import { AsaasService } from 'src/asaas/asaas.service';
     CryptoService,
     ProductsService,
     BillingService,
-    AsaasService,
+    PaymentGatewayService,
+    UsersService,
+    SubscriptionService,
+    JwtService,
   ],
-  controllers: [OrdersController],
+  controllers: [OrdersController, WebhookController],
   exports: [OrdersService],
 })
 export class OrderModule {}
