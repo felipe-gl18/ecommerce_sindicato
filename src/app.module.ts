@@ -7,9 +7,14 @@ import { ProductsModule } from './products/product.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { OrderModule } from './orders/orders.module';
 import { PaymentProviderModule } from './payment-provider/payment-provider.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
+    }),
     AuthModule,
     ProductsModule,
     SubscriptionModule,
