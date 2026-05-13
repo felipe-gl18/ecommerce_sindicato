@@ -3,6 +3,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -23,5 +24,12 @@ export class UsersController {
       sub: string;
     };
     return await this.userService.clients(user.sub);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard)
+  @Get('store/:slug')
+  async store(@Param('slug') slug: string) {
+    return await this.userService.store(slug);
   }
 }

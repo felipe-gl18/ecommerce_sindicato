@@ -22,11 +22,38 @@ export class OrdersController {
     private ordersService: OrdersService,
     private productsService: ProductsService,
   ) {}
+
   @Get('')
   @UseGuards(AuthGuard)
   async orders(@Request() req: Request) {
     const user = req['user'] as { sub: string };
-    return await this.ordersService.orders({ userId: user.sub });
+
+    const orders = await this.ordersService.orders({
+      userId: user.sub,
+    });
+
+    const ordersWithImage = await Promise.all(
+      orders.map(async (order) => {
+        const items = await Promise.all(
+          order.items.map(async (item) => ({
+            ...item,
+            product: {
+              ...item.product,
+              image: (
+                await this.productsService.getProductImageUrl(item.product.id)
+              ).url,
+            },
+          })),
+        );
+
+        return {
+          ...order,
+          items,
+        };
+      }),
+    );
+
+    return ordersWithImage;
   }
 
   @Get('seller-orders')

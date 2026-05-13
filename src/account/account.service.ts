@@ -45,7 +45,7 @@ export class AccountService {
 
       let storeSlug: string | undefined;
 
-      if (data.storeName)
+      if (data.storeName && data.storeName !== foundUser.storeName)
         storeSlug = await this.slugService.generateUniqueSlug(data.storeName);
 
       const updatedUser = await this.usersService.updateUser({

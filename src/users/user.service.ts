@@ -74,6 +74,22 @@ export class UsersService {
     });
   }
 
+  async store(slug: string) {
+    return this.prisma.user.findUnique({
+      where: {
+        storeSlug: slug,
+      },
+      select: {
+        username: true,
+        email: true,
+        storeName: true,
+        storeSlug: true,
+        cpfCnpj: true,
+        postalCode: true,
+      },
+    });
+  }
+
   async createUser(data: Prisma.UserCreateInput): Promise<User> {
     try {
       return await this.prisma.user.create({

@@ -30,7 +30,18 @@ export class ProductController {
   @HttpCode(HttpStatus.OK)
   @Get(':slug')
   async products(@Param('slug') slug: string) {
-    return await this.productsService.products({ slug: slug });
+    const products = await this.productsService.products({ slug: slug });
+    if (!products) return [];
+    const productsWithImages = await Promise.all(
+      products.map(async (product) => {
+        return {
+          ...product,
+          image: (await this.productsService.getProductImageUrl(product.id))
+            .url,
+        };
+      }),
+    );
+    return productsWithImages;
   }
 
   @HttpCode(HttpStatus.OK)

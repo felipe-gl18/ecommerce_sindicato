@@ -47,6 +47,7 @@ export class ProductsService {
       throw new InternalServerErrorException('Failed to fetch product');
     }
   }
+
   async products(params: {
     skip?: number;
     take?: number;
