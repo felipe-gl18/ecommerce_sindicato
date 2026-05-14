@@ -22,6 +22,8 @@ import type { Response } from 'express';
 import { RecoverPasswordDto } from './dto/recover-password.dto';
 import { RecoverPasswordGuard } from './recover-password.guard';
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -49,10 +51,10 @@ export class AuthController {
     );
 
     res.cookie('access_token', result.access_token, {
-      httpOnly: true, // js scripts has no access
-      secure: false, // just https connections
-      sameSite: 'lax', //  CSRF basic protection
-      maxAge: 1000 * 60 * 60, // 1h
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 1000 * 60 * 60,
     });
 
     return {
@@ -70,10 +72,10 @@ export class AuthController {
     const result = await this.authService.register(registerUserDto);
 
     res.cookie('access_token', result.access_token, {
-      httpOnly: true, // js scripts has no access
-      secure: false, // just https connections
-      sameSite: 'lax', //  CSRF basic protection
-      maxAge: 1000 * 60 * 60, // 1h
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 1000 * 60 * 60,
     });
 
     return {
