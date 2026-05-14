@@ -12,7 +12,7 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'http://localhost:5173',
-      'https://ecommerce-sindicato-frontend.onrender.com/',
+      'https://ecommerce-sindicato-frontend.onrender.com',
     ], // frontend
     credentials: true,
   });
