@@ -10,7 +10,10 @@ async function bootstrap() {
   const configService: ConfigService = app.get(ConfigService);
   app.use(cookieParser());
   app.enableCors({
-    origin: 'http://localhost:5173', // frontend
+    origin: [
+      'http://localhost:5173',
+      'https://ecommerce-sindicato-frontend.onrender.com/',
+    ], // frontend
     credentials: true,
   });
   const adminConfig: ServiceAccount = {
