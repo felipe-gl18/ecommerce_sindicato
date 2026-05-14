@@ -5,12 +5,16 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class SmtpMailProvider implements MailProvider {
   constructor(private readonly mailerService: MailerService) {}
+
   async sendRecoveryPasswordEmail(to: string, token: string): Promise<any> {
     return this.mailerService.sendMail({
       to,
       subject: 'Recover Password',
       template: 'recovery-password',
-      context: { token },
+      context: {
+        token,
+        frontend_url: process.env.FRONTEND_URL,
+      },
     });
   }
 }
